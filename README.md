@@ -52,3 +52,7 @@ flowchart LR
 Os princípios de trilha auditável, transparência proporcional e controle interno têm como referência [Nonato, ENAP (2018)](https://repositorio.enap.gov.br/bitstreams/7e4dc3af-08d5-4b14-8b1d-47287c61c1ae/download). Os demais repositórios acadêmicos indicados no escopo não permitiram leitura integral nesta implementação; os controles foram tratados como requisitos de engenharia, sem atribuir conclusões específicas a textos não verificados.
 
 Licença MIT em [LICENSE](LICENSE).
+
+## Recuperação de acesso
+
+O usuário ADMIN existente pode recuperar a senha pelo botão **Recuperar senha**. O Supabase envia um link ao e-mail cadastrado; o formulário de destino usa `PASSWORD_RECOVERY` e `updateUser`. O segredo nunca é salvo no repositório. Não exclua o usuário para trocar a senha: isso quebraria os vínculos com as carteiras.

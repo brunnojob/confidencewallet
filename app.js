@@ -5,12 +5,12 @@ const api=globalThis.CONFIDENCE_API_URL || '';
 const sb=createClient(url,key);
 const $=id=>document.getElementById(id);
 const msg=text=>{$('message').textContent=text};
-let current=null,subscription=null;
+let current=null,subscription=null,recovering=false;
 async function refresh(){
  const {data:{user},error}=await sb.auth.getUser();
  current=error?null:user;
- $('auth').hidden=!!current;$('dashboard').hidden=!current;$('identity').textContent=current?.email||'';
- if(!current){subscription?.unsubscribe();subscription=null;return}
+ $('auth').hidden=!!current||recovering;$('dashboard').hidden=!current||recovering;$('recovery').hidden=!recovering;$('identity').textContent=current?.email||'';
+ if(!current||recovering){subscription?.unsubscribe();subscription=null;return}
  const [accounts,transactions,profile]=await Promise.all([
   sb.from('accounts').select('id,currency,balance').eq('owner_id',current.id).order('currency'),
   sb.from('transactions').select('id,amount,currency,created_at,source_account,destination_account').order('created_at',{ascending:false}).limit(30),
@@ -59,6 +59,33 @@ $('signup').onclick=async e=>{
   if(data.session)await refresh();
  }catch(error){msg(error.message||'Não foi possível criar a conta.');}finally{button.disabled=false;}
 };
+$('forgot').onclick=async()=>{
+ const email=$('auth-form').elements.email.value.trim();
+ if(!email||!$('auth-form').elements.email.checkValidity()){msg('Informe seu e-mail para receber o link de recuperação.');$('auth-form').elements.email.focus();return;}
+ const button=$('forgot');button.disabled=true;
+ try{
+  const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin});
+  if(error)throw error;
+  msg('Se esta conta existir, enviaremos um link de recuperação para esse e-mail.');
+ }catch(error){msg(error.message||'Não foi possível enviar o link.');}
+ finally{button.disabled=false;}
+};
+$('recovery-form').onsubmit=async e=>{
+ e.preventDefault();const form=e.currentTarget;
+ const password=form.elements.new_password.value,confirm=form.elements.confirm_password.value;
+ if(password!==confirm){msg('As senhas não coincidem.');return;}
+ const button=e.submitter;button.disabled=true;
+ try{
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session)throw Error('Link expirado. Solicite um novo link de recuperação.');
+  const {error}=await sb.auth.updateUser({password});
+  if(error)throw error;
+  form.reset();recovering=false;await sb.auth.signOut();
+  msg('Senha alterada. Entre com a nova senha.');
+  refresh();
+ }catch(error){msg(error.message||'Não foi possível alterar a senha.');}
+ finally{button.disabled=false;}
+};
 document.querySelectorAll('[data-provider]').forEach(b=>b.onclick=async()=>{
  if(b.disabled)return;
  const {error}=await sb.auth.signInWithOAuth({provider:b.dataset.provider,options:{redirectTo:location.origin}});
@@ -68,4 +95,4 @@ providerAvailability();
 $('logout').onclick=async()=>{await sb.auth.signOut();refresh()};
 $('transfer').onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{if(!api)throw Error('API Java não configurada. Defina CONFIDENCE_API_URL em config.js e publique o backend.');const {data:{session}}=await sb.auth.getSession();if(!session)throw Error('Sessão expirada.');const f=new FormData(e.target);const id=crypto.randomUUID();const r=await fetch(api.replace(/\/$/,'')+'/api/transfer',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'X-Idempotency-Key':id},body:JSON.stringify({source:f.get('source'),destination:f.get('destination'),amount:f.get('amount')})});const x=await r.json();if(!r.ok)throw Error(x.error||'Transferência recusada');msg('Transferência registrada: '+x.transactionId);e.target.reset();refresh()}catch(err){msg(err.message)}finally{b.disabled=false}};
 const apiStatus=$('api-status');if(!api){apiStatus.textContent='Transferências temporariamente indisponíveis: o servidor financeiro ainda não foi publicado.';$('transfer').querySelector('button[type="submit"]').disabled=true;}else{apiStatus.textContent='API financeira conectada.';}
-sb.auth.onAuthStateChange(()=>setTimeout(refresh,0));refresh();
+sb.auth.onAuthStateChange(event=>{if(event==='PASSWORD_RECOVERY')recovering=true;setTimeout(refresh,0)});refresh();
