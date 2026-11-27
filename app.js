@@ -9,6 +9,7 @@ let current=null,recovering=false;
 async function refresh(){
  const {data:{user},error}=await sb.auth.getUser();
  current=error?null:user;
+ document.body.classList.toggle('signed-in',!!current&&!recovering);
  $('auth').hidden=!!current||recovering;$('dashboard').hidden=!current||recovering;$('recovery').hidden=!recovering;$('identity').textContent=current?.email||'';
  if(!current||recovering)return
  const {data:profile,error:profileError}=await sb.from('profiles').select('role,account_type,seller_status').eq('id',current.id).single();
@@ -44,7 +45,7 @@ $('auth-form').onsubmit=async e=>{
   msg(error.message==='Invalid login credentials'?'Credenciais inválidas. Confira o e-mail e a senha.':error.message||'Não foi possível entrar.');
  }finally{button.disabled=false;}
 };
-function authTab(signup){$('auth-form').hidden=signup;$('signup-form').hidden=!signup;$('show-login').classList.toggle('active',!signup);$('show-signup').classList.toggle('active',signup);$('auth').querySelector('h2').textContent=signup?'Crie sua conta':'Acesse sua conta';}
+function authTab(signup){$('auth-form').hidden=signup;$('signup-form').hidden=!signup;$('show-login').classList.toggle('active',!signup);$('show-signup').classList.toggle('active',signup);$('auth').querySelector('.form-heading').textContent=signup?'Crie sua conta':'Acesse sua conta';}
 $('show-login').onclick=()=>authTab(false);
 $('show-signup').onclick=()=>authTab(true);
 document.querySelector('.hero-actions a[href="#auth"]').addEventListener('click',()=>authTab(true));

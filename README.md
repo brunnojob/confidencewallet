@@ -71,6 +71,9 @@ O painel **Conta administradora → Alterar senha** chama `auth.updateUser` na s
 
 ## Gateway Mercado Pago Orders — teste
 
+O Checkout Pro hospedado atual redireciona para `checkout_url` gerado no servidor. Por isso, **a Public Key não é necessária para criar a order**: o segredo indispensável é o `MP_TEST_ACCESS_TOKEN` no backend. A chave de assinatura `MP_TEST_WEBHOOK_SECRET` valida notificações e `SUPABASE_SERVICE_ROLE_KEY` grava o resultado autorizado. A Public Key pode ser usada em componentes web específicos, mas não substitui o Access Token. Os segredos devem ser cadastrados como variáveis protegidas no painel Vercel, nunca no HTML, Git ou chat. A infraestrutura ainda não tem esses três segredos configurados; sem eles a API retorna 503.
+
+
 O catálogo público está em `/checkout.html`. Compradores e candidatos a vendedores podem criar conta via Supabase Auth; o vendedor começa em `PENDING` e não publica nem recebe pagamentos sem verificação e conexão própria com o Mercado Pago. O ADMIN opera o piloto de **uma conta vendedora de teste**. A loja extrai preço do banco; o servidor cria uma `/v1/orders` com UUID de idempotência e redireciona ao `checkout_url`. O retorno ao site não confirma pagamento. O webhook de teste verifica HMAC, consulta a order com Access Token de teste, compara ID/referência, BRL e valor, e só então registra `approved` quando `processed/accredited` e o valor pago bate. A função SQL é executável apenas por `service_role`. Eventos duplicados não geram crédito.
 
 ### Configuração de teste
