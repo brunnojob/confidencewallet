@@ -4,6 +4,7 @@ import com.nimbusds.jose.jwk.source.RemoteJWKSet;
 
 import com.nimbusds.jose.proc.*;
 import com.nimbusds.jwt.*;
+import com.nimbusds.jwt.proc.DefaultJWTProcessor;
 import java.net.URL;
 import java.time.Instant;
 import java.util.*;
