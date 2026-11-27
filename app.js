@@ -67,7 +67,7 @@ $('forgot').onclick=async()=>{
   const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin});
   if(error)throw error;
   msg('Se esta conta existir, enviaremos um link de recuperação para esse e-mail.');
- }catch(error){msg(error.message||'Não foi possível enviar o link.');}
+ }catch(error){msg(error.code==='over_email_send_rate_limit'||/email rate limit exceeded/i.test(error.message||'')?'O serviço de e-mail do Supabase atingiu a cota do projeto. Use um link de recuperação já recebido ou aguarde a renovação da cota; para envio contínuo, configure SMTP próprio.':error.message||'Não foi possível enviar o link.');}
  finally{button.disabled=false;}
 };
 $('recovery-form').onsubmit=async e=>{
