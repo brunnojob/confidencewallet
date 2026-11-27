@@ -2,34 +2,24 @@ import { refreshGateway } from './gateway-admin.js';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.0';
 const url='https://wabpybyaqiatelaecpal.supabase.co';
 const key='sb_publishable_jS_K1IMhLvuib6zyxPnMbw_u1W0pjbZ';
-const api=globalThis.CONFIDENCE_API_URL || '';
 const sb=createClient(url,key);
 const $=id=>document.getElementById(id);
 const msg=text=>{$('message').textContent=text};
-let current=null,subscription=null,recovering=false;
+let current=null,recovering=false;
 async function refresh(){
  const {data:{user},error}=await sb.auth.getUser();
  current=error?null:user;
  $('auth').hidden=!!current||recovering;$('dashboard').hidden=!current||recovering;$('recovery').hidden=!recovering;$('identity').textContent=current?.email||'';
- if(!current||recovering){subscription?.unsubscribe();subscription=null;return}
- const [accounts,transactions,profile]=await Promise.all([
-  sb.from('accounts').select('id,currency,balance').eq('owner_id',current.id).order('currency'),
-  sb.from('transactions').select('id,amount,currency,created_at,source_account,destination_account').order('created_at',{ascending:false}).limit(30),
-  sb.from('profiles').select('role,account_type,seller_status').eq('id',current.id).single()
- ]);
- for(const x of [accounts,transactions,profile])if(x.error){msg(x.error.message);return}
- $('accounts').replaceChildren(...accounts.data.map(a=>{const e=document.createElement('div');e.className='card';const s=document.createElement('small'),b=document.createElement('strong'),c=document.createElement('code');s.textContent='CARTEIRA '+a.currency;b.textContent=new Intl.NumberFormat('pt-BR',{style:'currency',currency:a.currency}).format(Number(a.balance));c.textContent=a.id;c.title='Clique para copiar';c.onclick=()=>navigator.clipboard.writeText(a.id).then(()=>msg('ID copiado.'));e.append(s,b,c);return e}));
- $('transfer').elements.source.replaceChildren(...accounts.data.map(a=>new Option(a.currency+' · '+a.id.slice(0,8),a.id)));
- $('transactions').replaceChildren(...transactions.data.map(t=>{const e=document.createElement('article'),l=document.createElement('div'),r=document.createElement('strong');const own=accounts.data.some(a=>a.id===t.source_account);l.textContent=own?'Saída':'Entrada';const d=document.createElement('small');d.textContent=' · '+new Date(t.created_at).toLocaleString('pt-BR');l.append(d);r.textContent=(own?'−':'+')+new Intl.NumberFormat('pt-BR',{style:'currency',currency:t.currency}).format(Number(t.amount));e.append(l,r);return e}));
- if(!transactions.data.length)$('transactions').textContent='Nenhuma movimentação ainda.';
- const isAdmin=profile.data.role==='ADMIN',isSeller=profile.data.account_type==='SELLER';
+ if(!current||recovering)return
+ const {data:profile,error:profileError}=await sb.from('profiles').select('role,account_type,seller_status').eq('id',current.id).single();
+ if(profileError){msg(profileError.message);return}
+ const isAdmin=profile.role==='ADMIN',isSeller=profile.account_type==='SELLER';
  $('admin').hidden=!isAdmin;$('gateway-admin').hidden=!isAdmin;
  $('seller-panel').hidden=isAdmin||!isSeller;$('buyer-panel').hidden=isAdmin||isSeller;
- $('dashboard-title').textContent=isAdmin?'Painel de vendas':isSeller?'Área do vendedor':'Área do comprador';
- $('dashboard-hint').textContent=isAdmin?'Gerencie os produtos e acompanhe os pedidos de teste.':isSeller?'Cadastro em análise. A liberação de cobranças exige conectar sua própria conta do provedor.':'Explore produtos e acompanhe o status pelo link do pedido.';
- if(profile.data.role==='ADMIN')refreshGateway(sb,current);
- if(profile.data.role==='ADMIN'){const a=await sb.from('admin_audit').select('*').order('seq',{ascending:false}).limit(20);if(!a.error)$('audit').replaceChildren(...a.data.map(x=>{const e=document.createElement('article');e.textContent='#'+x.seq+' · '+x.transaction_id+' · '+x.payload_hash;e.title='HMAC: '+x.hmac_signature;return e}))}
- if(!subscription)subscription=sb.channel('wallet-change').on('postgres_changes',{event:'*',schema:'public',table:'accounts',filter:'owner_id=eq.'+current.id},()=>refresh()).on('postgres_changes',{event:'*',schema:'public',table:'transactions'},()=>refresh()).subscribe();
+ $('dashboard-title').textContent=isAdmin?'Minha wallet':isSeller?'Minha wallet · vendedor':'Minha wallet';
+ $('dashboard-hint').textContent=isAdmin?'A carteira cripto está em desenvolvimento. As ferramentas de venda de teste ficam abaixo.':isSeller?'Cadastro em análise. A liberação de cobranças exige conectar sua própria conta do provedor.':'A criação da carteira cripto ainda está em desenvolvimento.';
+ if(profile.role==='ADMIN')refreshGateway(sb,current);
+
 }
 async function providerAvailability(){
  const status=$('provider-status'),google=document.querySelector('[data-provider="google"]'),apple=document.querySelector('[data-provider="apple"]');
@@ -126,6 +116,4 @@ $('set-password').onsubmit=async e=>{
  finally{button.disabled=false;}
 };
 
-$('transfer').onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{if(!api)throw Error('API Java não configurada. Defina CONFIDENCE_API_URL em config.js e publique o backend.');const {data:{session}}=await sb.auth.getSession();if(!session)throw Error('Sessão expirada.');const f=new FormData(e.target);const id=crypto.randomUUID();const r=await fetch(api.replace(/\/$/,'')+'/api/transfer',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'X-Idempotency-Key':id},body:JSON.stringify({source:f.get('source'),destination:f.get('destination'),amount:f.get('amount')})});const x=await r.json();if(!r.ok)throw Error(x.error||'Transferência recusada');msg('Transferência registrada: '+x.transactionId);e.target.reset();refresh()}catch(err){msg(err.message)}finally{b.disabled=false}};
-const apiStatus=$('api-status');if(!api){apiStatus.textContent='Transferências temporariamente indisponíveis: o servidor financeiro ainda não foi publicado.';$('transfer').querySelector('button[type="submit"]').disabled=true;}else{apiStatus.textContent='API financeira conectada.';}
 sb.auth.onAuthStateChange(event=>{if(event==='PASSWORD_RECOVERY')recovering=true;setTimeout(refresh,0)});refresh();

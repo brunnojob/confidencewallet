@@ -1,14 +1,24 @@
 # ◇ ConfidenceWallet
 
-Plataforma experimental de checkout e gestão de pedidos em **modo de teste**, com Supabase Auth/PostgreSQL, funções Node na Vercel para Mercado Pago Orders, core Java 21 e auditoria C17 para o ledger demonstrativo. **Não é um banco, não processa dinheiro real e não oferece custódia regulada.**
+Projeto de **carteira cripto de autocustódia** com BTC, ETH e tokens como USDT como objetivo principal. O usuário controlará as chaves no próprio aplicativo; o servidor não deve recebê-las. Conversão cripto ↔ BRL, P2P e PDV são módulos posteriores. O site atual **ainda não cria chaves, endereços, transações ou saldos on-chain**. O checkout Mercado Pago permanece em modo de teste como serviço secundário; o ledger BRL/USD/EUR existente é legado experimental e não representa cripto. Não envie fundos a este aplicativo.
+
+## Produto principal: carteira real
+
+1. Criar e restaurar chaves somente no cliente, com recuperação e assinatura local. A primeira plataforma será o **site web**, com chave criptografada localmente no navegador e desbloqueio pelo usuário. Essa versão será uma *hot wallet*. O suporte futuro a hardware exigirá um assinador separado, que poderá permanecer offline; a interface ConfidenceWallet poderá ser a mesma.
+2. Implementar BTC com derivação, endereços, UTXOs, taxas, troco e assinatura compatíveis com a rede principal; ETH com RPC confiável, chain ID e proteção de nonce e taxas; USDT separado por rede e contrato verificado, com precisão do token. USDT é indexado ao dólar, não ao real.
+3. Apresentar USD como referência de cotação, sem confundir cotação fiduciária com o token USDT. Exibir apenas saldos consultados e reconciliados da rede, estado de confirmação e links para transações verificáveis. Nenhum valor do ledger SQL é saldo cripto. Nunca usar Supabase Auth como cofre de seed, nem guardar seed, frase de recuperação ou chave privada em PostgreSQL, logs ou analytics.
+4. Fazer revisão de segurança independente e testes em redes de teste antes de permitir envio e recebimento na rede principal. A versão publicada não anuncia depósito enquanto não existir carteira assinante verificada.
+5. Integrar conversão via parceiro com contrato e API apropriados. A [Kamoney](https://doc2.kamoney.com.br/) publica documentação para pagamentos de lojistas em cripto e serviços Pix; é necessário validar o produto comercial e as credenciais autorizadas para compra/venda de cripto por terceiros. Mercado Pago Orders de teste não liquida cripto.
+
+O fluxo de cadastro via Supabase identifica o usuário para serviços da plataforma. A senha desse login **não é** a chave da carteira e não deve desbloquear fundos sozinha.
 
 ## Arquitetura
 
 | Camada | Responsabilidade |
 | --- | --- |
-| Vercel (raiz e /api) | Auth, loja, painel e funções de teste para Mercado Pago Orders |
+| Vercel (raiz e /api) | Auth, site e funções de teste para Mercado Pago Orders; sem chaves privadas |
 | Java 21 (backend) | JWT, antifraude, idempotência, JDBC, FX e orquestração |
-| PostgreSQL Supabase | Partidas dobradas, saldos, trigger de imutabilidade, RLS e serialização |
+| PostgreSQL Supabase | Dados de contas e checkout; o ledger fiat experimental não é estado on-chain |
 | C17 (native-audit) | SHA-256/HMAC-SHA256, CLI e biblioteca via Project Panama |
 
 O frontend não tem permissão de escrever em tabelas financeiras. O core verifica a cadeia inteira antes do débito, adquire advisory lock transacional, consulta o saldo e chama `private.execute_double_entry_transfer`. A função bloqueia as carteiras em ordem crescente do UUID, valida a chave de idempotência, debita e credita na mesma transação, grava duas entradas e anexa o hash encadeado. O HMAC usa uma chave de 32 bytes exclusiva do backend. O banco valida o hash canônico; a verificação do HMAC depende do core e da proteção operacional da chave. Um operador de banco com privilégios elevados continua podendo alterar dados; ancoragem externa, backup WORM e dupla aprovação são necessárias para uma garantia adversarial maior.
