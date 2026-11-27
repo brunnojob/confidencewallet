@@ -1,3 +1,4 @@
+import { refreshGateway } from './gateway-admin.js';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.0';
 const url='https://wabpybyaqiatelaecpal.supabase.co';
 const key='sb_publishable_jS_K1IMhLvuib6zyxPnMbw_u1W0pjbZ';
@@ -21,7 +22,8 @@ async function refresh(){
  $('transfer').elements.source.replaceChildren(...accounts.data.map(a=>new Option(a.currency+' · '+a.id.slice(0,8),a.id)));
  $('transactions').replaceChildren(...transactions.data.map(t=>{const e=document.createElement('article'),l=document.createElement('div'),r=document.createElement('strong');const own=accounts.data.some(a=>a.id===t.source_account);l.textContent=own?'Saída':'Entrada';const d=document.createElement('small');d.textContent=' · '+new Date(t.created_at).toLocaleString('pt-BR');l.append(d);r.textContent=(own?'−':'+')+new Intl.NumberFormat('pt-BR',{style:'currency',currency:t.currency}).format(Number(t.amount));e.append(l,r);return e}));
  if(!transactions.data.length)$('transactions').textContent='Nenhuma movimentação ainda.';
- $('admin').hidden=profile.data.role!=='ADMIN';
+ $('admin').hidden=profile.data.role!=='ADMIN';$('gateway-admin').hidden=profile.data.role!=='ADMIN';
+ if(profile.data.role==='ADMIN')refreshGateway(sb,current);
  if(profile.data.role==='ADMIN'){const a=await sb.from('admin_audit').select('*').order('seq',{ascending:false}).limit(20);if(!a.error)$('audit').replaceChildren(...a.data.map(x=>{const e=document.createElement('article');e.textContent='#'+x.seq+' · '+x.transaction_id+' · '+x.payload_hash;e.title='HMAC: '+x.hmac_signature;return e}))}
  if(!subscription)subscription=sb.channel('wallet-change').on('postgres_changes',{event:'*',schema:'public',table:'accounts',filter:'owner_id=eq.'+current.id},()=>refresh()).on('postgres_changes',{event:'*',schema:'public',table:'transactions'},()=>refresh()).subscribe();
 }

@@ -16,6 +16,11 @@ jobs:
           java-version: '21'
           cache: maven
           cache-dependency-path: backend/pom.xml
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Checkout API
+        run: npm test
       - name: Native audit
         run: make -C native-audit test
       - name: Java core

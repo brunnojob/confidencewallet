@@ -58,3 +58,18 @@ Licença MIT em [LICENSE](LICENSE).
 O usuário ADMIN existente pode recuperar a senha pelo botão **Recuperar senha** quando o SMTP do Supabase estiver funcional. O formulário de destino usa `PASSWORD_RECOVERY` e `updateUser`. Um erro SMTP `535 Authentication failed` indica credenciais inválidas no provedor de e-mail; corrija-as no painel Auth > SMTP. O segredo nunca é salvo no repositório. Não exclua o usuário para trocar a senha: isso quebraria os vínculos com as carteiras.
 
 O painel **Conta administradora → Alterar senha** chama `auth.updateUser` na sessão autenticada. Após a troca, a sessão é encerrada para que o novo login seja testado.
+
+## Gateway de checkout Mercado Pago
+
+O catálogo público está em `/checkout.html`. O ADMIN publica produtos BRL no painel; o servidor cria um pedido com preço obtido do banco e uma preferência Checkout Pro. O comprador paga no ambiente do Mercado Pago. O retorno do navegador apenas exibe o status; **somente webhook assinado, consulta autenticada à API do Mercado Pago e comparação de pedido/valor/moeda** podem alterar o estado. Eventos duplicados são idempotentes. O dinheiro liquida na conta Mercado Pago do titular, não nas carteiras do dashboard. A interface não recebe dados de cartão.
+
+As funções Node da Vercel em `/api` orquestram o checkout e as notificações; o core Java 21 continua separado para o ledger, ainda sem implantação. A nova migration `supabase/migrations/20261127090000_gateway_checkout.sql` cria `products`, `checkout_orders` e `payment_events` com RLS. A função de confirmação é executável apenas por `service_role`.
+
+### Ativação
+
+1. Crie a aplicação Checkout Pro em [Suas integrações do Mercado Pago](https://www.mercadopago.com.br/developers/panel/app), obtenha o **Access Token de produção** e habilite os meios de pagamento disponíveis para sua conta.
+2. Em Vercel → ConfidenceWallet → Settings → Environment Variables, configure os segredos **encrypted/sensitive** para Production: `MP_ACCESS_TOKEN`, `MP_WEBHOOK_SECRET` e `SUPABASE_SERVICE_ROLE_KEY` (chave `service_role`/secret do projeto Supabase). Nunca use prefixo `NEXT_PUBLIC_`, `VITE_`, arquivo `config.js` ou commit para esses valores. Reimplante após salvar.
+3. Em Mercado Pago → aplicação → Webhooks, configure URL de produção `https://confidencewallet.vercel.app/api/payment-webhook`, evento **Pagamentos**, e copie a chave secreta de assinatura para `MP_WEBHOOK_SECRET`.
+4. Publique um produto no painel ADMIN, teste uma compra real de baixo valor e confirme pedido `approved` só após webhook. Verifique também estorno e notificação duplicada. Faça conciliação diária com relatórios do Mercado Pago antes de liberar vendas em escala.
+
+`npm test` verifica assinatura HMAC e valores em centavos. Enquanto os três segredos não estiverem presentes, o endpoint retorna HTTP 503 e não cria cobranças. Não exiba os valores em logs nem envie credenciais em chat. Para operação com vários vendedores, split/payouts, afiliados, saldos resgatáveis e transferências externas, é necessário onboarding dos recebedores, contratos e controles regulatórios adicionais; esta etapa atende **uma única conta vendedora**. As carteiras BRL/USD/EUR legadas permanecem demonstrativas e não recebem crédito automático de pedidos.
