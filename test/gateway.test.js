@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHmac } from 'node:crypto';
 import { validSignature, centsFromDecimal } from '../lib/gateway.js';
-import { confirmedOrder } from '../api/payment-webhook.js';
+import { confirmedOrder, statusFromProvider } from '../api/payment-webhook.js';
 test('signed Orders webhook accepts fresh notification and rejects forged IDs', () => {
   const ts = '1742505638', now = 1742505638000, id = 'ORDTST01KS5AJ6HTK2HRQ3XJ3C2JCKP9', request = 'abc', secret = 'secret';
   const v1 = createHmac('sha256', secret).update(`id:${id.toLowerCase()};request-id:${request};ts:${ts};`).digest('hex');
@@ -20,4 +20,9 @@ test('provider order must match local reference and amount', () => {
   assert.equal(confirmedOrder(order,1999,order.id,'some-local-uuid'),true);
   assert.equal(confirmedOrder(order,2000,order.id,'some-local-uuid'),false);
   assert.equal(confirmedOrder(order,1999,order.id,'different'),false);
+});
+test('Orders status uses provider spelling and exact paid amount', () => {
+  assert.equal(statusFromProvider({status:'canceled'}, 1999), 'cancelled');
+  assert.equal(statusFromProvider({status:'processed',status_detail:'accredited',total_paid_amount:'19.99'}, 1999), 'approved');
+  assert.equal(statusFromProvider({status:'processed',status_detail:'accredited',total_paid_amount:'19.98'}, 1999), 'pending');
 });

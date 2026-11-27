@@ -9,16 +9,30 @@ export default async function handler(req, res) {
   const { productId, idempotencyKey } = req.body || {};
   if (!uuid.test(productId || '') || !uuid.test(idempotencyKey || '')) return respond(res, 400, { error: 'Produto ou chave inválida' });
   try {
+    const [previous] = await db(`/checkout_orders?idempotency_key=eq.${idempotencyKey}&select=id,product_id,amount_cents,checkout_url`);
+    if (previous) {
+      if (previous.product_id !== productId) return respond(res, 409, { error: 'Chave de tentativa usada para outro produto.' });
+      if (previous.checkout_url) return respond(res, 200, { orderId: previous.id, checkoutUrl: previous.checkout_url });
+    }
     const [product] = await db(`/products?id=eq.${productId}&active=eq.true&select=id,title,price_cents,seller_id`);
     if (!product) return respond(res, 404, { error: 'Produto indisponível' });
     // A single Mercado Pago test seller exists. Other sellers require their own OAuth connection.
     if (product.seller_id !== process.env.MP_TEST_SELLER_ID) return respond(res, 409, { error: 'Vendedor ainda não conectado ao Mercado Pago.' });
-    const orderId = randomUUID();
-    await db('/checkout_orders', { method: 'POST', body: JSON.stringify({
-      id: orderId, product_id: product.id, seller_id: product.seller_id,
-      amount_cents: product.price_cents, idempotency_key: idempotencyKey
-    }) });
-    const amount = (product.price_cents / 100).toFixed(2);
+    const orderId = previous?.id || randomUUID();
+    if (!previous) {
+      try {
+        await db('/checkout_orders', { method: 'POST', body: JSON.stringify({
+          id: orderId, product_id: product.id, seller_id: product.seller_id,
+          amount_cents: product.price_cents, idempotency_key: idempotencyKey
+        }) });
+      } catch (error) {
+        const [raced] = await db(`/checkout_orders?idempotency_key=eq.${idempotencyKey}&select=id,product_id,checkout_url`);
+        if (!raced || raced.product_id !== productId) throw error;
+        if (raced.checkout_url) return respond(res, 200, { orderId: raced.id, checkoutUrl: raced.checkout_url });
+        return respond(res, 409, { error: 'Pedido em processamento. Tente novamente em instantes.' });
+      }
+    }
+    const amount = ((previous?.amount_cents ?? product.price_cents) / 100).toFixed(2);
     const back = `${origin}/checkout.html?order=${orderId}`;
     const checkout = await mp('/v1/orders', { method: 'POST',
       headers: { 'X-Idempotency-Key': idempotencyKey },
@@ -32,7 +46,11 @@ export default async function handler(req, res) {
     if (!/^(.+\.)?mercadopago\.com\.br$/.test(checkoutUrl.hostname) || checkoutUrl.protocol !== 'https:') throw Error('Invalid checkout URL');
     const saved = await db(`/checkout_orders?id=eq.${orderId}&mp_order_id=is.null`, { method: 'PATCH',
       body: JSON.stringify({ mp_order_id: checkout.id, checkout_url: checkoutUrl.href }) });
-    if (saved.length !== 1) throw Error('Order association failed');
+    if (saved.length !== 1) {
+      const [raced] = await db(`/checkout_orders?id=eq.${orderId}&select=mp_order_id,checkout_url`);
+      if (raced?.mp_order_id === checkout.id && raced.checkout_url) return respond(res, 200, { orderId, checkoutUrl: raced.checkout_url });
+      throw Error('Order association failed');
+    }
     return respond(res, 201, { orderId, checkoutUrl: checkoutUrl.href });
   } catch (error) {
     console.error('test order creation:', error.message);
