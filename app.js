@@ -57,6 +57,7 @@ $('auth-form').onsubmit=async e=>{
 function authTab(signup){$('auth-form').hidden=signup;$('signup-form').hidden=!signup;$('show-login').classList.toggle('active',!signup);$('show-signup').classList.toggle('active',signup);$('auth').querySelector('h2').textContent=signup?'Crie sua conta':'Acesse sua conta';}
 $('show-login').onclick=()=>authTab(false);
 $('show-signup').onclick=()=>authTab(true);
+document.querySelector('.hero-actions a[href="#auth"]').addEventListener('click',()=>authTab(true));
 $('signup-form').onsubmit=async e=>{
  e.preventDefault();const form=e.currentTarget,button=e.submitter;button.disabled=true;
  try{
