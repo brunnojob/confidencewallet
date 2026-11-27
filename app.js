@@ -34,7 +34,7 @@ async function providerAvailability(){
   google.disabled=settings.external?.google!==true;
   apple.hidden=settings.external?.apple!==true;
   apple.disabled=settings.external?.apple!==true;
-  status.textContent=google.disabled?'Google ainda não foi ativado no Supabase. Use Criar conta com e-mail e senha.':'Você também pode entrar com Google.';
+  status.textContent=google.disabled?'Google ainda não foi ativado no Supabase. Entre por e-mail e senha.':'Você também pode entrar com Google.';
  }catch(error){google.disabled=true;apple.hidden=true;status.textContent='Google indisponível por enquanto. Use e-mail e senha.';}
 }
 $('auth-form').onsubmit=async e=>{
@@ -45,19 +45,8 @@ $('auth-form').onsubmit=async e=>{
   if(error)throw error;
   msg('Sessão iniciada.');await refresh();
  }catch(error){
-  msg(error.message==='Invalid login credentials'?'Credenciais inválidas. Se ainda não criou sua conta, clique em Criar conta.':error.message||'Não foi possível entrar.');
+  msg(error.message==='Invalid login credentials'?'Credenciais inválidas. Confira o e-mail e a senha do administrador.':error.message||'Não foi possível entrar.');
  }finally{button.disabled=false;}
-};
-$('signup').onclick=async e=>{
- const form=$('auth-form');if(!form.reportValidity())return;
- const button=e.currentTarget;button.disabled=true;
- try{
-  const f=new FormData(form);
-  const {data,error}=await sb.auth.signUp({email:f.get('email'),password:f.get('password'),options:{emailRedirectTo:location.origin}});
-  if(error)throw error;
-  msg(data.session?'Conta criada e sessão iniciada.':'Cadastro solicitado. Abra o link de confirmação enviado ao seu e-mail e depois entre.');
-  if(data.session)await refresh();
- }catch(error){msg(error.message||'Não foi possível criar a conta.');}finally{button.disabled=false;}
 };
 $('forgot').onclick=async()=>{
  const email=$('auth-form').elements.email.value.trim();
@@ -107,7 +96,7 @@ $('set-password').onsubmit=async e=>{
   if(error)throw error;
   form.reset();
   await sb.auth.signOut();
-  msg('Senha definida. Entre novamente por e-mail e senha para confirmar.');
+  msg('Senha alterada. Entre novamente por e-mail e senha para confirmar.');
   await refresh();
  }catch(error){msg(error.message||'Não foi possível definir a senha. Entre novamente com Google e tente de novo.');}
  finally{button.disabled=false;}
