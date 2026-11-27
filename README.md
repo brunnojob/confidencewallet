@@ -56,3 +56,5 @@ Licença MIT em [LICENSE](LICENSE).
 ## Recuperação de acesso
 
 O usuário ADMIN existente pode recuperar a senha pelo botão **Recuperar senha**. O Supabase envia um link ao e-mail cadastrado; o formulário de destino usa `PASSWORD_RECOVERY` e `updateUser`. O segredo nunca é salvo no repositório. Não exclua o usuário para trocar a senha: isso quebraria os vínculos com as carteiras.
+
+Se a conta ADMIN foi criada por Google e ainda não possui senha, entre com Google e use **Conta administradora → Definir senha**. O formulário chama `auth.updateUser` na sessão autenticada e não depende de e-mail de recuperação. Após a troca, a sessão é encerrada para que o novo login seja testado.

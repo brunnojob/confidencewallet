@@ -93,6 +93,26 @@ document.querySelectorAll('[data-provider]').forEach(b=>b.onclick=async()=>{
 });
 providerAvailability();
 $('logout').onclick=async()=>{await sb.auth.signOut();refresh()};
+$('set-password').onsubmit=async e=>{
+ e.preventDefault();
+ const form=e.currentTarget, password=form.elements.new_password.value;
+ if(password!==form.elements.confirm_password.value){msg('As senhas não coincidem.');return;}
+ const button=e.submitter;button.disabled=true;
+ try{
+  const {data:{user},error:identityError}=await sb.auth.getUser();
+  if(identityError||!user)throw Error('Sessão expirada. Entre novamente.');
+  const {data:profile,error:roleError}=await sb.from('profiles').select('role').eq('id',user.id).single();
+  if(roleError||profile?.role!=='ADMIN')throw Error('Somente o administrador pode usar este formulário.');
+  const {error}=await sb.auth.updateUser({password});
+  if(error)throw error;
+  form.reset();
+  await sb.auth.signOut();
+  msg('Senha definida. Entre novamente por e-mail e senha para confirmar.');
+  await refresh();
+ }catch(error){msg(error.message||'Não foi possível definir a senha. Entre novamente com Google e tente de novo.');}
+ finally{button.disabled=false;}
+};
+
 $('transfer').onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{if(!api)throw Error('API Java não configurada. Defina CONFIDENCE_API_URL em config.js e publique o backend.');const {data:{session}}=await sb.auth.getSession();if(!session)throw Error('Sessão expirada.');const f=new FormData(e.target);const id=crypto.randomUUID();const r=await fetch(api.replace(/\/$/,'')+'/api/transfer',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'X-Idempotency-Key':id},body:JSON.stringify({source:f.get('source'),destination:f.get('destination'),amount:f.get('amount')})});const x=await r.json();if(!r.ok)throw Error(x.error||'Transferência recusada');msg('Transferência registrada: '+x.transactionId);e.target.reset();refresh()}catch(err){msg(err.message)}finally{b.disabled=false}};
 const apiStatus=$('api-status');if(!api){apiStatus.textContent='Transferências temporariamente indisponíveis: o servidor financeiro ainda não foi publicado.';$('transfer').querySelector('button[type="submit"]').disabled=true;}else{apiStatus.textContent='API financeira conectada.';}
 sb.auth.onAuthStateChange(event=>{if(event==='PASSWORD_RECOVERY')recovering=true;setTimeout(refresh,0)});refresh();
