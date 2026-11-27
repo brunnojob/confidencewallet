@@ -1,0 +1,1 @@
+globalThis.CONFIDENCE_API_URL = '';

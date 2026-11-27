@@ -1,0 +1,24 @@
+name: Native and Java CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: backend/pom.xml
+      - name: Native audit
+        run: make -C native-audit test
+      - name: Java core
+        run: mvn -B -f backend/pom.xml test package
+      - name: Docker build
+        run: docker build -f backend/Dockerfile -t confidencewallet-core .

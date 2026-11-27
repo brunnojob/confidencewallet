@@ -1,0 +1,8 @@
+.env
+.env.*
+!.env.example
+backend/target/
+native-audit/*.so
+native-audit/*.dll
+*.class
+native-audit/ledger-audit

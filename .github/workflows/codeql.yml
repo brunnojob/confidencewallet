@@ -1,0 +1,42 @@
+name: CodeQL
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '23 5 * * 1'
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        language: [java-kotlin, cpp]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+      - uses: actions/setup-java@v4
+        if: matrix.language == 'java-kotlin'
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Build Java
+        if: matrix.language == 'java-kotlin'
+        run: mvn -B -f backend/pom.xml -DskipTests package
+      - name: Build C
+        if: matrix.language == 'cpp'
+        run: make -C native-audit
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}
+          output: sarif-results
+          upload: always
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sarif-${{ matrix.language }}
+          path: sarif-results
