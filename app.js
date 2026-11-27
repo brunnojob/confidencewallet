@@ -15,14 +15,18 @@ async function refresh(){
  const [accounts,transactions,profile]=await Promise.all([
   sb.from('accounts').select('id,currency,balance').eq('owner_id',current.id).order('currency'),
   sb.from('transactions').select('id,amount,currency,created_at,source_account,destination_account').order('created_at',{ascending:false}).limit(30),
-  sb.from('profiles').select('role').eq('id',current.id).single()
+  sb.from('profiles').select('role,account_type,seller_status').eq('id',current.id).single()
  ]);
  for(const x of [accounts,transactions,profile])if(x.error){msg(x.error.message);return}
  $('accounts').replaceChildren(...accounts.data.map(a=>{const e=document.createElement('div');e.className='card';const s=document.createElement('small'),b=document.createElement('strong'),c=document.createElement('code');s.textContent='CARTEIRA '+a.currency;b.textContent=new Intl.NumberFormat('pt-BR',{style:'currency',currency:a.currency}).format(Number(a.balance));c.textContent=a.id;c.title='Clique para copiar';c.onclick=()=>navigator.clipboard.writeText(a.id).then(()=>msg('ID copiado.'));e.append(s,b,c);return e}));
  $('transfer').elements.source.replaceChildren(...accounts.data.map(a=>new Option(a.currency+' · '+a.id.slice(0,8),a.id)));
  $('transactions').replaceChildren(...transactions.data.map(t=>{const e=document.createElement('article'),l=document.createElement('div'),r=document.createElement('strong');const own=accounts.data.some(a=>a.id===t.source_account);l.textContent=own?'Saída':'Entrada';const d=document.createElement('small');d.textContent=' · '+new Date(t.created_at).toLocaleString('pt-BR');l.append(d);r.textContent=(own?'−':'+')+new Intl.NumberFormat('pt-BR',{style:'currency',currency:t.currency}).format(Number(t.amount));e.append(l,r);return e}));
  if(!transactions.data.length)$('transactions').textContent='Nenhuma movimentação ainda.';
- $('admin').hidden=profile.data.role!=='ADMIN';$('gateway-admin').hidden=profile.data.role!=='ADMIN';
+ const isAdmin=profile.data.role==='ADMIN',isSeller=profile.data.account_type==='SELLER';
+ $('admin').hidden=!isAdmin;$('gateway-admin').hidden=!isAdmin;
+ $('seller-panel').hidden=isAdmin||!isSeller;$('buyer-panel').hidden=isAdmin||isSeller;
+ $('dashboard-title').textContent=isAdmin?'Painel de vendas':isSeller?'Área do vendedor':'Área do comprador';
+ $('dashboard-hint').textContent=isAdmin?'Gerencie os produtos e acompanhe os pedidos de teste.':isSeller?'Cadastro em análise. A liberação de cobranças exige conectar sua própria conta do provedor.':'Explore produtos e acompanhe o status pelo link do pedido.';
  if(profile.data.role==='ADMIN')refreshGateway(sb,current);
  if(profile.data.role==='ADMIN'){const a=await sb.from('admin_audit').select('*').order('seq',{ascending:false}).limit(20);if(!a.error)$('audit').replaceChildren(...a.data.map(x=>{const e=document.createElement('article');e.textContent='#'+x.seq+' · '+x.transaction_id+' · '+x.payload_hash;e.title='HMAC: '+x.hmac_signature;return e}))}
  if(!subscription)subscription=sb.channel('wallet-change').on('postgres_changes',{event:'*',schema:'public',table:'accounts',filter:'owner_id=eq.'+current.id},()=>refresh()).on('postgres_changes',{event:'*',schema:'public',table:'transactions'},()=>refresh()).subscribe();
@@ -47,8 +51,25 @@ $('auth-form').onsubmit=async e=>{
   if(error)throw error;
   msg('Sessão iniciada.');await refresh();
  }catch(error){
-  msg(error.message==='Invalid login credentials'?'Credenciais inválidas. Confira o e-mail e a senha do administrador.':error.message||'Não foi possível entrar.');
+  msg(error.message==='Invalid login credentials'?'Credenciais inválidas. Confira o e-mail e a senha.':error.message||'Não foi possível entrar.');
  }finally{button.disabled=false;}
+};
+function authTab(signup){$('auth-form').hidden=signup;$('signup-form').hidden=!signup;$('show-login').classList.toggle('active',!signup);$('show-signup').classList.toggle('active',signup);$('auth').querySelector('h2').textContent=signup?'Crie sua conta':'Acesse sua conta';}
+$('show-login').onclick=()=>authTab(false);
+$('show-signup').onclick=()=>authTab(true);
+$('signup-form').onsubmit=async e=>{
+ e.preventDefault();const form=e.currentTarget,button=e.submitter;button.disabled=true;
+ try{
+  const f=new FormData(form),password=String(f.get('password'));
+  if(password!==f.get('confirm_password'))throw Error('As senhas não coincidem.');
+  const account_type=$('signup-type').value;
+  if(!['BUYER','SELLER'].includes(account_type))throw Error('Tipo de conta inválido.');
+  const {data,error}=await sb.auth.signUp({email:String(f.get('email')).trim(),password,options:{emailRedirectTo:location.origin,data:{account_type}}});
+  if(error)throw error;
+  form.reset();authTab(false);
+  msg(data.session?'Conta criada. Você já pode entrar.':'Confira seu e-mail para confirmar o cadastro antes de entrar.');
+ }catch(error){msg(error.message||'Não foi possível criar a conta.');}
+ finally{button.disabled=false;}
 };
 $('forgot').onclick=async()=>{
  const email=$('auth-form').elements.email.value.trim();
