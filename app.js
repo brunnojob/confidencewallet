@@ -25,9 +25,47 @@ async function refresh(){
  if(profile.data.role==='ADMIN'){const a=await sb.from('admin_audit').select('*').order('seq',{ascending:false}).limit(20);if(!a.error)$('audit').replaceChildren(...a.data.map(x=>{const e=document.createElement('article');e.textContent='#'+x.seq+' · '+x.transaction_id+' · '+x.payload_hash;e.title='HMAC: '+x.hmac_signature;return e}))}
  if(!subscription)subscription=sb.channel('wallet-change').on('postgres_changes',{event:'*',schema:'public',table:'accounts',filter:'owner_id=eq.'+current.id},()=>refresh()).on('postgres_changes',{event:'*',schema:'public',table:'transactions'},()=>refresh()).subscribe();
 }
-$('auth-form').onsubmit=async e=>{e.preventDefault();const f=new FormData(e.target);const {error}=await sb.auth.signInWithPassword({email:f.get('email'),password:f.get('password')});msg(error?.message||'Sessão iniciada.');if(!error)refresh()};
-$('signup').onclick=async()=>{const f=new FormData($('auth-form'));const {error}=await sb.auth.signUp({email:f.get('email'),password:f.get('password')});msg(error?.message||'Cadastro iniciado. Confirme seu e-mail se solicitado.')};
-document.querySelectorAll('[data-provider]').forEach(b=>b.onclick=async()=>{const {error}=await sb.auth.signInWithOAuth({provider:b.dataset.provider,options:{redirectTo:location.origin}});if(error)msg(error.message)});
+async function providerAvailability(){
+ const status=$('provider-status'),google=document.querySelector('[data-provider="google"]'),apple=document.querySelector('[data-provider="apple"]');
+ try{
+  const r=await fetch(url+'/auth/v1/settings',{headers:{apikey:key}});
+  if(!r.ok)throw Error('Não foi possível consultar os provedores.');
+  const settings=await r.json();
+  google.disabled=settings.external?.google!==true;
+  apple.hidden=settings.external?.apple!==true;
+  apple.disabled=settings.external?.apple!==true;
+  status.textContent=google.disabled?'Google ainda não foi ativado no Supabase. Use Criar conta com e-mail e senha.':'Você também pode entrar com Google.';
+ }catch(error){google.disabled=true;apple.hidden=true;status.textContent='Google indisponível por enquanto. Use e-mail e senha.';}
+}
+$('auth-form').onsubmit=async e=>{
+ e.preventDefault();const button=e.submitter;button.disabled=true;
+ try{
+  const f=new FormData(e.target);
+  const {error}=await sb.auth.signInWithPassword({email:f.get('email'),password:f.get('password')});
+  if(error)throw error;
+  msg('Sessão iniciada.');await refresh();
+ }catch(error){
+  msg(error.message==='Invalid login credentials'?'Credenciais inválidas. Se ainda não criou sua conta, clique em Criar conta.':error.message||'Não foi possível entrar.');
+ }finally{button.disabled=false;}
+};
+$('signup').onclick=async e=>{
+ const form=$('auth-form');if(!form.reportValidity())return;
+ const button=e.currentTarget;button.disabled=true;
+ try{
+  const f=new FormData(form);
+  const {data,error}=await sb.auth.signUp({email:f.get('email'),password:f.get('password'),options:{emailRedirectTo:location.origin}});
+  if(error)throw error;
+  msg(data.session?'Conta criada e sessão iniciada.':'Cadastro solicitado. Abra o link de confirmação enviado ao seu e-mail e depois entre.');
+  if(data.session)await refresh();
+ }catch(error){msg(error.message||'Não foi possível criar a conta.');}finally{button.disabled=false;}
+};
+document.querySelectorAll('[data-provider]').forEach(b=>b.onclick=async()=>{
+ if(b.disabled)return;
+ const {error}=await sb.auth.signInWithOAuth({provider:b.dataset.provider,options:{redirectTo:location.origin}});
+ if(error)msg(error.message);
+});
+providerAvailability();
 $('logout').onclick=async()=>{await sb.auth.signOut();refresh()};
 $('transfer').onsubmit=async e=>{e.preventDefault();const b=e.submitter;b.disabled=true;try{if(!api)throw Error('API Java não configurada. Defina CONFIDENCE_API_URL em config.js e publique o backend.');const {data:{session}}=await sb.auth.getSession();if(!session)throw Error('Sessão expirada.');const f=new FormData(e.target);const id=crypto.randomUUID();const r=await fetch(api.replace(/\/$/,'')+'/api/transfer',{method:'POST',headers:{'Content-Type':'application/json','Authorization':'Bearer '+session.access_token,'X-Idempotency-Key':id},body:JSON.stringify({source:f.get('source'),destination:f.get('destination'),amount:f.get('amount')})});const x=await r.json();if(!r.ok)throw Error(x.error||'Transferência recusada');msg('Transferência registrada: '+x.transactionId);e.target.reset();refresh()}catch(err){msg(err.message)}finally{b.disabled=false}};
+const apiStatus=$('api-status');if(!api){apiStatus.textContent='Transferências temporariamente indisponíveis: o servidor financeiro ainda não foi publicado.';$('transfer').querySelector('button[type="submit"]').disabled=true;}else{apiStatus.textContent='API financeira conectada.';}
 sb.auth.onAuthStateChange(()=>setTimeout(refresh,0));refresh();
